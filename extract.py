@@ -1,15 +1,7 @@
 import mido
 from typing import List
 import argparse
-
-
-class Note:
-    def __init__(self, inst, noteid, start, duration, track) -> None:
-        self.inst = inst
-        self.noteid = noteid
-        self.start = start
-        self.duration = duration
-        self.track = track
+from utils import Note
 
 
 class Md:
@@ -62,11 +54,7 @@ class Md:
         with open(filename, "w") as f:
             f.write("tempo {}\n".format(self.tempo if self.tempo else 500000))
             for note in self.notes:
-                f.write(
-                    "note {} {} {} {} {}\n".format(
-                        note.inst, note.noteid, note.start, note.duration, note.track
-                    )
-                )
+                f.write(note.save())
 
 
 if __name__ == "__main__":
