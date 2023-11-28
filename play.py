@@ -1,5 +1,6 @@
 from time import sleep
 from machine import Pin, PWM
+from sys import platform
 
 silence = 48000
 inf = 1 << 30
@@ -10,12 +11,29 @@ def get_freq(note):
     return int(440 * 2 ** ((note - 69) / 12.0))
 
 
+# generic PWM
+class GPWM:
+    def __init__(self, pin, freq=440, duty_u16=0) -> None:
+        if platform == "rp2":
+            self.pwm = PWM(pin)
+            self.pwm.freq(freq)
+            self.pwm.duty_u16(duty_u16)
+        else:
+            self.pwm = PWM(pin, freq=freq, duty_u16=duty_u16)
+
+    def freq(self, freq):
+        self.pwm.freq(freq)
+
+    def duty_u16(self, duty_u16):
+        self.pwm.duty_u16(duty_u16)
+
+
 class SoundManager:
     def __init__(self, pins) -> None:
         self.keyframe = inf
         self.pwms = []
         for pin in pins:
-            self.pwms.append(PWM(Pin(pin), freq=silence, duty_u16=32768))
+            self.pwms.append(GPWM(Pin(pin), freq=silence, duty_u16=32768))
         self.avi = [i for i in range(len(self.pwms))]  # 可用pin
         self.stop = [inf for _ in range(len(self.pwms))]  # 当前音的停止时间
         self.track = [-1 for _ in range(len(self.pwms))]
