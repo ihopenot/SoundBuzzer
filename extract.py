@@ -44,7 +44,7 @@ class Md:
                         state[msg.note] = (False, now)
                     else:
                         state[msg.note] = (True, now)
-                    print(msg)
+                    # print(msg)
                 else:
                     print(msg)
         self.notes = sorted(self.notes, key=lambda x: x.start * 1000 - x.noteid)
