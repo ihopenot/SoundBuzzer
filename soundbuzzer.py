@@ -1,6 +1,7 @@
 from time import sleep_us
 from machine import Pin, PWM, Timer
 from sys import platform
+import config
 
 from utils import Note
 
@@ -13,19 +14,36 @@ def get_freq(note):
     return int(440 * 2 ** ((note - 69) / 12.0))
 
 
-# generic PWM
-class GPWM:
-    def __init__(self, pin, vol=None, freq=440, duty_u16=0) -> None:
+# maybe we need a more accurate function
+def get_duty(vol):
+    return int(vol * 65535)
+
+
+class Buzzer:
+    KEEP = 0
+    SOFT = 1
+
+    def __init__(self, mode, pin, vol=None, freq=silence, duty_u16=32768) -> None:
+        self.mode = mode
+        self.keyframe = []
+
         if platform == "rp2":
-            self.pwm = PWM(pin)
+            self.pwm = PWM(Pin(pin))
             self.pwm.freq(freq)
             self.pwm.duty_u16(duty_u16)
         else:
-            self.pwm = PWM(pin, freq=freq, duty_u16=duty_u16)
+            self.pwm = PWM(Pin(pin), freq=freq, duty_u16=duty_u16)
 
-        if vol:
-            self.vol = vol
-            self.vol.on()
+        # if Buzzer is in SOFT mode, there must be a volumn pin
+        if mode == Buzzer.KEEP:
+            if vol:
+                self.vol = Pin(vol, Pin.OUT)
+            else:
+                self.vol = None
+        elif mode == Buzzer.SOFT:
+            self.vol = PWM(Pin(vol))
+            self.vol.freq(config.vol_freq)
+        self.set_vol(1)
 
     def freq(self, freq=None):
         if freq:
@@ -39,37 +57,73 @@ class GPWM:
         else:
             return self.pwm.duty_u16()
 
+    def silence(self):
+        self.keyframe = []
+        self.pwm.freq(silence)
 
-class SoundManager:
-    def __init__(self, pins) -> None:
-        self.keyframe = inf
-        self.pwms = []
-        for pin in pins:
-            self.pwms.append(
-                GPWM(Pin(pin), vol=Pin(pin - 1, Pin.OUT), freq=silence, duty_u16=32768)
-            )
-        self.avi = [i for i in range(len(self.pwms))]  # 可用pin
-        self.stop = [inf for _ in range(len(self.pwms))]  # 当前音的停止时间
-        self.track = [-1 for _ in range(len(self.pwms))]
-
-    def init(self):
-        for pwm in self.pwms:
-            pwm.freq(silence)
+    def set_vol(self, vol):
+        if self.vol == None:
+            return
+        if self.mode == Buzzer.KEEP:
+            if vol:
+                self.vol.on()
+            else:
+                self.vol.off()
+        elif self.mode == Buzzer.SOFT:
+            vol = min(1, max(0, vol))
+            self.vol.duty_u16(get_duty(vol))
 
     def update(self, time):
-        for i in range(len(self.pwms)):
+        while len(self.keyframe) and time >= self.keyframe[0][0]:
+            _, vol = self.keyframe.pop(0)
+            self.set_vol(vol)
+        if len(self.keyframe):
+            return self.keyframe[0][0]
+        else:
+            return inf
+
+    def play(self, note):
+        self.freq(get_freq(note.noteid))
+        self.set_vol(1)
+        self.keyframe = []
+        if self.mode == Buzzer.SOFT:
+            for t, vol in config.vol_time:
+                self.keyframe.append((note.start + t, vol))
+
+    def test(self):
+        self.set_vol(1)
+        for i in [60, 62, 64, 65, 67, 69, 71]:
+            self.freq(get_freq(i))
+            sleep_us(500000)
+        self.silence()
+
+
+class SoundManager:
+    def __init__(self, buzzers) -> None:
+        self.keyframe = inf
+        self.buzzers = buzzers
+        self.avi = [i for i in range(len(self.buzzers))]  # 可用Buzzer
+        self.stop = [inf for _ in range(len(self.buzzers))]  # 当前音的停止时间
+        self.track = [-1 for _ in range(len(self.buzzers))]  # 当前音的音轨
+
+    def init(self):
+        for buzzer in self.buzzers:
+            buzzer.silence()
+
+    def update(self, time):
+        for i in range(len(self.buzzers)):
             if time >= self.stop[i]:
-                self.pwms[i].freq(silence)
+                self.buzzers[i].silence()
                 self.avi.append(i)
                 self.stop[i] = inf
-        return min(self.stop)
+        return min(min(self.stop), min([i.update(time) for i in self.buzzers]))
 
     def add(self, note):  # start aka time
         # TODO: inst
         idx = -1
         if len(self.avi) == 0:  # try to stop some same track note
             tracks = set()
-            for i in range(len(self.pwms)):
+            for i in range(len(self.buzzers)):
                 if self.track[i] in tracks:
                     idx = i
                     break
@@ -81,14 +135,14 @@ class SoundManager:
         else:
             idx = self.avi.pop()
 
-        self.pwms[idx].freq(get_freq(note.noteid))
+        self.buzzers[idx].play(note)
         self.stop[idx] = note.start + note.duration
         self.track[idx] = note.track
 
     def silence(self):
-        for i in range(len(self.pwms)):
-            self.pwms[i].freq(silence)
-        self.avi = [i for i in range(len(self.pwms))]
+        for i in range(len(self.buzzers)):
+            self.buzzers[i].silence()
+        self.avi = [i for i in range(len(self.buzzers))]
 
 
 class SBConfig:
@@ -172,3 +226,4 @@ class SB:
         tosleep = (time - self.time) * self.tempo / 480
         sleep_us(int(tosleep))
         self.time = time
+        print(f"goto {time}")
