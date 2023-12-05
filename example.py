@@ -6,10 +6,10 @@ b3 = soundbuzzer.Buzzer(soundbuzzer.Buzzer.SOFT, 11, 18)
 b4 = soundbuzzer.Buzzer(soundbuzzer.Buzzer.SOFT, 13, 17)
 b5 = soundbuzzer.Buzzer(soundbuzzer.Buzzer.SOFT, 15, 16)
 
-snd0 = soundbuzzer.SoundManager([b1, b2])
-snd1 = soundbuzzer.SoundManager([b3, b4, b5])
+snd0 = soundbuzzer.SoundManager([b1, b2], max_vol=1)
+snd1 = soundbuzzer.SoundManager([b3, b4, b5], max_vol=0.8)
 conf = soundbuzzer.SBConfig([0, 1, 2])
 conf.set_snd([0], snd0)
 conf.set_snd([1, 2], snd1)
 
-sb = soundbuzzer.SB("weather", conf)
+sb = soundbuzzer.SB("out", conf)
