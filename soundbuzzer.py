@@ -25,6 +25,7 @@ class Buzzer:
 
     def __init__(self, mode, pin, vol=None, freq=silence, duty_u16=32768) -> None:
         self.mode = mode
+        self.max_vol = 1
         self.keyframe = []
 
         if platform == "rp2":
@@ -61,6 +62,9 @@ class Buzzer:
         self.keyframe = []
         self.pwm.freq(silence)
 
+    def set_max_vol(self, max_vol):
+        self.max_vol = max_vol
+
     def set_vol(self, vol):
         if self.vol == None:
             return
@@ -71,7 +75,7 @@ class Buzzer:
                 self.vol.off()
         elif self.mode == Buzzer.SOFT:
             vol = min(1, max(0, vol))
-            self.vol.duty_u16(get_duty(vol))
+            self.vol.duty_u16(get_duty(vol * self.max_vol))
 
     def update(self, time):
         while len(self.keyframe) and time >= self.keyframe[0][0]:
@@ -99,9 +103,11 @@ class Buzzer:
 
 
 class SoundManager:
-    def __init__(self, buzzers) -> None:
+    def __init__(self, buzzers, max_vol=1) -> None:
         self.keyframe = inf
         self.buzzers = buzzers
+        for buzzer in self.buzzers:
+            buzzer.set_max_vol(max_vol)
         self.avi = [i for i in range(len(self.buzzers))]  # 可用Buzzer
         self.stop = [inf for _ in range(len(self.buzzers))]  # 当前音的停止时间
         self.track = [-1 for _ in range(len(self.buzzers))]  # 当前音的音轨
